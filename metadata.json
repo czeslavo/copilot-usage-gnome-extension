@@ -2,7 +2,7 @@
     "uuid": "copilot-usage@czeslavo.github.io",
     "name": "Copilot Usage",
     "description": "Shows GitHub Copilot premium request usage percentage in the top panel",
-    "shell-version": ["48"],
+    "shell-version": ["48", "49"],
     "url": "https://github.com/czeslavo/copilot-usage-gnome-extension",
     "settings-schema": "org.gnome.shell.extensions.copilot-usage"
 }
