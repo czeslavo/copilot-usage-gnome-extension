@@ -1,0 +1,24 @@
+/* Copilot Usage extension stylesheet */
+
+.copilot-usage-label {
+    font-weight: bold;
+    padding: 0 4px;
+}
+
+/* Usage level colours (applied to the panel label) */
+.copilot-usage-low {
+    color: #57e389; /* green */
+}
+
+.copilot-usage-medium {
+    color: #f8e45c; /* yellow */
+}
+
+.copilot-usage-high {
+    color: #ff7800; /* orange-red */
+}
+
+/* Detail rows inside the popup menu */
+.copilot-usage-detail {
+    font-size: 0.9em;
+}

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist>
+  <schema id="org.gnome.shell.extensions.copilot-usage"
+          path="/org/gnome/shell/extensions/copilot-usage/">
+
+    <key name="user-session-cookie" type="s">
+      <default>''</default>
+      <summary>GitHub user_session cookie value</summary>
+      <description>
+        The value of the user_session cookie from github.com. Extract it from
+        your browser's DevTools (Application tab → Cookies → github.com →
+        user_session). Required to authenticate with the GitHub Copilot
+        entitlement endpoint.
+      </description>
+    </key>
+
+    <key name="refresh-interval" type="i">
+      <default>30</default>
+      <range min="5" max="1440"/>
+      <summary>Refresh interval in minutes</summary>
+      <description>
+        How often to poll the GitHub entitlement endpoint for updated usage
+        data. Minimum 5 minutes, maximum 1440 (24 hours).
+      </description>
+    </key>
+
+  </schema>
+</schemalist>
