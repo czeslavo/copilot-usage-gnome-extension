@@ -6,11 +6,11 @@ Shows your GitHub Copilot **credit usage** as a live percentage in the GNOME top
 CP: 34%
 ```
 
-Click the label to see a breakdown: requests used vs. total, chat and completions quotas, the reset date, and which authentication source is active.
+Click the label to see a breakdown: credits used vs. total, today's consumption, daily average vs. budget, on-track status, reset date, and auth source.
 
 ## Requirements
 
-- GNOME Shell 48
+- GNOME Shell 48 or 49
 - Python 3 (standard library only — used to read the Firefox cookie)
 - Firefox logged in to GitHub (recommended), **or** a manually copied session cookie
 
@@ -88,9 +88,40 @@ The label shows the percentage of your credit quota that has been used this peri
 Click the label to expand the popup:
 
 - **Credits** — absolute count and percentage used
-- **Remaining** — requests left before the quota resets
+- **Remaining** — credits left before the quota resets
 - **Chat / Completions** — whether these are metered or unlimited on your plan
+- **Today** — credits consumed today (marked "partial" on the first tracked day)
+- **Avg / Budget** — your running daily average vs. the even-spend budget
+- **Status** — `On track ✓` (green) or `Exhausts <date>` (orange) when on pace to exceed the quota before reset
 - **Resets** — the reset date and how many days remain
 - **Auth** — which source provided the cookie (`Firefox` or `manual`)
 
 The popup also has a **Refresh now** item to trigger an immediate update, and a **Preferences…** item to open settings.
+
+## Statistics
+
+Open **Preferences → Statistics** for a deeper view of your usage history.
+
+**Summary** shows:
+
+| Row | What it means |
+|---|---|
+| Today | Credits consumed so far today |
+| Daily average | Running average since the period started (gap-robust: stays accurate even when the machine is off) |
+| Daily budget | Even-spend target — `total quota ÷ period length` |
+| Projected at reset | Estimated total if your current average holds to the end of the period |
+| Status | On track or projected overage with estimated exhaustion date |
+
+**Daily Usage chart** — a bar chart of credits consumed per day across the current billing period. Green bars are at or under budget; orange bars are over. The dashed line marks the daily budget. Today's bar is rendered at reduced opacity to indicate it is still accumulating.
+
+**Day-by-Day table** — one row per tracked day, newest first. Over-budget days are highlighted in orange. Rows flagged "partial" or "covers N untracked days" indicate gaps in the data (see limitations below).
+
+**Clear History** removes all stored data.
+
+### Limitations
+
+Daily figures are derived from periodic snapshots taken while the extension is running. A few edge cases apply:
+
+- **The first tracked day is always partial.** Usage before the first recorded sample is not attributable to a specific day.
+- **Gaps when the machine is off.** If the extension was not running for one or more days, the next tracked day shows the aggregated delta and is flagged "covers N untracked days". This does not affect the daily average, which is computed from the cumulative API total and is always gap-robust.
+- **Same dependency as the main feature.** If GitHub changes the entitlement endpoint, both the live display and history recording pause.

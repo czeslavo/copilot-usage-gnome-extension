@@ -24,5 +24,16 @@
       </description>
     </key>
 
+    <key name="usage-history" type="s">
+      <default>'{}'</default>
+      <summary>Usage history JSON</summary>
+      <description>
+        JSON-serialised snapshot history used to derive daily consumption,
+        running averages, and quota-exhaustion projections. Managed
+        automatically by the extension; editing by hand is not recommended.
+        Rolling window of up to 90 days across billing periods.
+      </description>
+    </key>
+
   </schema>
 </schemalist>

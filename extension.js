@@ -9,6 +9,8 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
+import {loadHistory, recordSample, computeStats} from './stats.js';
+
 // Promisify so we can await subprocess output
 Gio._promisify(Gio.Subprocess.prototype, 'communicate_utf8_async');
 
@@ -48,7 +50,7 @@ class CopilotIndicator extends PanelMenu.Button {
         });
         this.add_child(this._label);
 
-        // --- Popup menu items ---
+        // ── Quota rows ────────────────────────────────────────────────────
         this._usageItem = new PopupMenu.PopupMenuItem('', {reactive: false});
         this._usageItem.label.style_class = 'copilot-usage-detail';
         this.menu.addMenuItem(this._usageItem);
@@ -65,6 +67,22 @@ class CopilotIndicator extends PanelMenu.Button {
         this._completionsItem.label.style_class = 'copilot-usage-detail';
         this.menu.addMenuItem(this._completionsItem);
 
+        // ── Daily stats rows ──────────────────────────────────────────────
+        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+
+        this._todayItem = new PopupMenu.PopupMenuItem('', {reactive: false});
+        this._todayItem.label.style_class = 'copilot-usage-detail';
+        this.menu.addMenuItem(this._todayItem);
+
+        this._avgItem = new PopupMenu.PopupMenuItem('', {reactive: false});
+        this._avgItem.label.style_class = 'copilot-usage-detail';
+        this.menu.addMenuItem(this._avgItem);
+
+        this._statusItem = new PopupMenu.PopupMenuItem('', {reactive: false});
+        this._statusItem.label.style_class = 'copilot-usage-detail';
+        this.menu.addMenuItem(this._statusItem);
+
+        // ── Period / auth rows ────────────────────────────────────────────
         this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
 
         this._resetItem = new PopupMenu.PopupMenuItem('', {reactive: false});
@@ -91,7 +109,7 @@ class CopilotIndicator extends PanelMenu.Button {
         this._setError('No data');
     }
 
-    updateUsage(data, cookieSource) {
+    updateUsage(data, cookieSource, stats = null) {
         const q = data.quotas;
         const pq = q.premiumInteractionsQuota;
 
@@ -99,10 +117,9 @@ class CopilotIndicator extends PanelMenu.Button {
         const used    = Math.round(pq.used);
         const total   = pq.total;
 
-        // Panel label
+        // ── Panel label ───────────────────────────────────────────────────
         this._label.text = `CP: ${pctUsed}%`;
 
-        // Remove old colour class, add new one
         this._label.remove_style_class_name('copilot-usage-low');
         this._label.remove_style_class_name('copilot-usage-medium');
         this._label.remove_style_class_name('copilot-usage-high');
@@ -113,13 +130,13 @@ class CopilotIndicator extends PanelMenu.Button {
         else
             this._label.add_style_class_name('copilot-usage-low');
 
-        // Detail rows
+        // ── Quota rows ────────────────────────────────────────────────────
         this._usageItem.label.text =
             `Credits: ${used.toLocaleString()} / ${total.toLocaleString()} (${pctUsed}% used)`;
 
-        const pctPremRemaining = pq.percentRemaining.toFixed(1);
+        const pctRemaining = pq.percentRemaining.toFixed(1);
         this._creditsItem.label.text =
-            `Remaining: ${Math.round(pq.percentRemaining * total / 100).toLocaleString()} credits (${pctPremRemaining}%)`;
+            `Remaining: ${Math.round(pq.percentRemaining * total / 100).toLocaleString()} credits (${pctRemaining}%)`;
 
         this._chatItem.label.text = q.chatQuota?.unlimited
             ? 'Chat: unlimited'
@@ -129,12 +146,48 @@ class CopilotIndicator extends PanelMenu.Button {
             ? 'Completions: unlimited'
             : `Completions: ${Math.round(q.completionsQuota.used)} / ${q.completionsQuota.total} used`;
 
-        // Reset date
+        // ── Daily stats rows ──────────────────────────────────────────────
+        const fmt = n => Math.round(n).toLocaleString();
+
+        if (stats) {
+            // Today's consumption
+            if (stats.todayConsumption !== null) {
+                this._todayItem.label.text = stats.todayPartial
+                    ? `Today: +${fmt(stats.todayConsumption)} (partial)`
+                    : `Today: +${fmt(stats.todayConsumption)}`;
+            } else {
+                this._todayItem.label.text = 'Today: collecting…';
+            }
+
+            // Average vs budget
+            this._avgItem.label.text =
+                `Avg: ${fmt(stats.avgPerDay)}/day  ·  Budget: ${fmt(stats.budgetPerDay)}/day`;
+
+            // On-track status
+            this._statusItem.label.remove_style_class_name('copilot-usage-low');
+            this._statusItem.label.remove_style_class_name('copilot-usage-high');
+            if (stats.onTrack) {
+                this._statusItem.label.text = 'On track ✓';
+                this._statusItem.label.add_style_class_name('copilot-usage-low');
+            } else {
+                const exStr = stats.exhaustionDate
+                    ? `Exhausts ${stats.exhaustionDate.toLocaleDateString(undefined, {month: 'short', day: 'numeric'})}`
+                    : 'Over budget';
+                this._statusItem.label.text = exStr;
+                this._statusItem.label.add_style_class_name('copilot-usage-high');
+            }
+        } else {
+            this._todayItem.label.text  = 'Today: collecting…';
+            this._avgItem.label.text    = '';
+            this._statusItem.label.text = '';
+        }
+
+        // ── Period / auth rows ────────────────────────────────────────────
         const resetDate = new Date(q.resetDateUtc);
-        const now = new Date();
-        const msPerDay = 86_400_000;
-        const daysLeft = Math.ceil((resetDate - now) / msPerDay);
-        const resetStr = resetDate.toLocaleDateString(undefined, {month: 'short', day: 'numeric', year: 'numeric'});
+        const now       = new Date();
+        const daysLeft  = Math.ceil((resetDate - now) / 86_400_000);
+        const resetStr  = resetDate.toLocaleDateString(undefined,
+            {month: 'short', day: 'numeric', year: 'numeric'});
         this._resetItem.label.text =
             `Resets: ${resetStr} (${daysLeft} day${daysLeft !== 1 ? 's' : ''})`;
 
@@ -151,6 +204,9 @@ class CopilotIndicator extends PanelMenu.Button {
         this._creditsItem.label.text     = '';
         this._chatItem.label.text        = '';
         this._completionsItem.label.text = '';
+        this._todayItem.label.text       = '';
+        this._avgItem.label.text         = '';
+        this._statusItem.label.text      = '';
         this._resetItem.label.text       = '';
         this._sourceItem.label.text      = '';
     }
@@ -190,17 +246,16 @@ export default class CopilotUsageExtension extends Extension {
         this._indicator?.destroy();
         this._indicator = null;
 
-        this._session = null;
+        this._session  = null;
         this._settings = null;
     }
 
     _startPolling() {
         this._stopPolling();
         const intervalMin = this._settings.get_int('refresh-interval');
-        const intervalSec = intervalMin * 60;
         this._pollId = GLib.timeout_add_seconds(
             GLib.PRIORITY_DEFAULT,
-            intervalSec,
+            intervalMin * 60,
             () => {
                 this.fetchUsage(); // fire-and-forget; SOURCE_CONTINUE returned synchronously
                 return GLib.SOURCE_CONTINUE;
@@ -274,18 +329,40 @@ export default class CopilotUsageExtension extends Extension {
             null,
             (session, result) => {
                 try {
-                    const bytes = session.send_and_read_finish(result);
+                    const bytes  = session.send_and_read_finish(result);
                     const status = msg.get_status();
 
                     if (status === Soup.Status.OK) {
                         const text = new TextDecoder().decode(bytes.get_data());
                         const data = JSON.parse(text);
-                        this._indicator?.updateUsage(data, cookieSource);
+
+                        // Record sample and derive statistics
+                        const pq      = data.quotas.premiumInteractionsQuota;
+                        const history = loadHistory(
+                            this._settings?.get_string('usage-history') ?? '{}');
+                        recordSample(history, {
+                            used:         Math.round(pq.used),
+                            total:        pq.total,
+                            resetDateUtc: data.quotas.resetDateUtc,
+                        });
+                        this._settings?.set_string('usage-history',
+                            JSON.stringify(history));
+
+                        const stats = computeStats(history, {
+                            used:         Math.round(pq.used),
+                            total:        pq.total,
+                            resetDateUtc: data.quotas.resetDateUtc,
+                        });
+
+                        this._indicator?.updateUsage(data, cookieSource, stats);
+
                     } else if (status === Soup.Status.NOT_MODIFIED) {
                         // 304: data unchanged — nothing to update
+
                     } else if (status === Soup.Status.UNAUTHORIZED ||
                                status === Soup.Status.FORBIDDEN) {
                         this._indicator?.setError('Cookie expired – log in to GitHub in Firefox');
+
                     } else {
                         this._indicator?.setError(`HTTP ${status}`);
                     }
